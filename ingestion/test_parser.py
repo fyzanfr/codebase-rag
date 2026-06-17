@@ -6,12 +6,13 @@ import tree_sitter_typescript as tstypescript
 import tree_sitter_rust as tsrust 
 import tree_sitter_go as tsgo 
 import tree_sitter_java as tsjava 
-from tree_sitter import Language, Parser, Query, QueryCursor 
+from tree_sitter import Language, Parser, Query, QueryCursor
+from models.chunk import CodeChunk
 
 
 _LangCapsules: dict[str, object] = {
         "python": tspython.language(),
-        "typscript": tstypescript.language(),
+        "typscript": tstypescript.language_typescript(),
         "tsx": tstypescript.language_tsx(),
         "rust": tsrust.language(),
         "go": tsgo.language(),
@@ -122,7 +123,7 @@ class ASTChunker:
             return self._queries[lang]
         qs = _chunk_queries.get(lang)
         capsule = _LangCapsules.get(lang)
-        if qs or capsule is None:
+        if not qs or capsule is None:
             self._queries[lang] = None 
             return None 
         try:
@@ -155,8 +156,45 @@ class ASTChunker:
         if query is None:
             return self._fallback_chunks(repo_name, file_path, content)
 
+        cursor = QueryCursor(query)
+        matches = cursor.matches(root)
 
+        chunks: list[CodeChunk] = []
+        seen_bytes: set[tuple[int, int]] = set()
 
+        for pattern_index, captures in matches:
+            node_nodes = captures.get("node", [])
+            name_nodes = captures.get("name", [])
+            body_nodes = captures.get("body", [])
+            trait_nodes = captures.get("trait", [])
+
+            for i, node in enumerate(node_nodes):
+                sb, eb = node.start_byte, node.end_byte
+                if (sb, eb) in seen_bytes or eb - sb < 4:
+                    continue
+                seen_bytes.add((sb, eb))
+
+                body = content[sb:eb].decode("utf-8", errors="replace")
+                start_line = node.start_point[0] + 1
+                end_line = node.end_point[0] + 1
+                if end_line - start_line < 2:
+                    continue
+
+                symbol = ""
+                if i < len(name_nodes):
+                    symbol = name_nodes[i].text.decode("utf-8", errors="replace")
+
+                kind = self._classify_kind(lang, pattern_index)
+                if not symbol:
+                    symbol = f"<anon>:{start_line}"
+
+                chunks.append(CodeChunk(
+                    repo_name=repo, path=file_path,
+                    start_line=start_line, end_line=end_line,
+                    symbol=symbol, kind=kind, body=body, language=lang,
+                    ))
+
+        return chunks or self._fallback_chunks(repo, file_path, content)
 
 
     def _fallback_chunks(self, repo: str, file_path: str, content: bytes) -> list[CodeChunk]:
@@ -184,49 +222,53 @@ class ASTChunker:
                 symbol=Path(file_path).stem, kind="file",
                 body="\n".join(lines[start:]), language="unknown",
             ))
-        return chunks
+        return chunks 
+
+    def _classify_kind(self, lang: str, pattern_idx: int) -> str:
+        mapping = {
+             "python":     ["function", "class"],
+             "typescript": ["function", "method", "class", "interface", "function", "class", "interface"],
+             "tsx":        ["function", "method", "class", "interface", "function", "class", "interface"],
+             "rust":       ["function", "struct", "impl"],
+             "go":         ["function", "method", "type"],
+             "java":       ["method", "class", "interface"],
+        }
+        kinds = mapping.get(lang, ["function"])
+        return kinds[pattern_idx] if pattern_idx < len(kinds) else "function"
 
 
-        root_node = self.parser.parse(raw_bytes).root_node
-        cursor = QueryCursor(self.query)
-        matches = cursor.matches(root_node)
+def chunk_repository(repo_name:str, repo_path:Path, chunker: ASTChunker | None = None) -> list[CodeChunk]:
+    repo_path = Path(repo_path).expanduser().resolve()
+    if not repo_path.exists():
+        raise FileNotFoundError(f"The repository path {repo_path} does not exist.")
 
-        chunks = []
+    if chunker is None:
+        chunker = ASTChunker()
+        
+    all_chunks: list[CodeChunk] = []
+    skip_dirs = {".", "node_modules", "vendor", "target", "__pycache__", "build", "dist", ".git", ".hg"}
+    skip_files = {"package-lock.json", "yarn.lock", "Cargo.lock", "go.sum"}
 
-        for pattern_index, captures in matches:
-            node_list = captures.get("node", [])
-            name_list = captures.get("name", [])
-            
-            if not node_list:
+    
+
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
+        for fname in files:
+            if fname in skip_files:
                 continue
-                
-            node = node_list[0]
-            
-            # Extract line coordinates (1-indexed for human readability)
-            start_line = node.start_point[0] + 1
-            end_line = node.end_point[0] + 1
-            
-            # Extract the raw code code body string
-            body = raw_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
-            
-            # Extract the literal symbol name string
-            symbol = "anonymous"
-            if name_list:
-                symbol = raw_bytes[name_list[0].start_byte:name_list[0].end_byte].decode("utf-8", errors="replace")
-                
-            # Classify using our pattern index array lookup
-            kind = self.kinds[pattern_index] if pattern_index < len(self.kinds) else "function"
-            
-            # 5. Pack everything neatly into a structured dictionary
-            chunks.append({
-                "repo": repo_name,
-                "path": file_path,
-                "start_line": start_line,
-                "end_line": end_line,
-                "symbol": symbol,
-                "kind": kind,
-                "body": body,
-                "language": "python"
-            })
-            
-        return chunks
+            ext = Path(fname).suffix.lower()
+            if ext not in _ext_to_lang:
+                continue
+            fpath = Path(root) / fname 
+            try:
+                content = fpath.read_bytes()
+                if len(content) > 500_000:
+                    continue 
+                rel = str(fpath.relative_to(repo_path.parent))
+                all_chunks.extend(chunker.chunk_file(repo_name, rel, content))
+            except Exception:
+                continue
+
+    return all_chunks
+
+
