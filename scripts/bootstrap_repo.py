@@ -4,11 +4,10 @@ import shutil
 import sys
 from git import Repo
 from pathlib import Path
-# Fix python paths
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from index.dense import DenseIndex
-# 1. IMPORT YOUR CHUNKER CLASS HERE (Adjust the import path to match your layout!)
+from index.sparse import SparseIndex
 from ingestion.parser import ASTChunker
 from ingestion import queries
 from config import settings
@@ -17,6 +16,7 @@ TMP_DIR = Path("./tmp/bootstrap_sandbox")
 
 async def bootstrap_repository(repo_url: str, repo_name: str):
     indexer = DenseIndex()
+    sparse_indexer = SparseIndex()
     chunker = ASTChunker(
             languages=queries.LANG_CAPSULES,
             queries=queries.CHUNK_QUERIES,
@@ -30,13 +30,10 @@ async def bootstrap_repository(repo_url: str, repo_name: str):
     print(f"Cloning repository: {repo_url}...")
     Repo.clone_from(repo_url, TMP_DIR, depth=1)
     
-    # 2. Replicate your walker's discovery loop for a full repository bootstrap
     all_new_chunks = []
     
-    # Recursively find every file in the cloned repository directory
     for fpath in TMP_DIR.rglob("*"):
         if fpath.is_file() and fpath.suffix.lower() in chunker.ext_map:
-            # Calculate the relative path from the root just like GitHub does
             rel_path_str = str(fpath.relative_to(TMP_DIR))
             try:
                 content = fpath.read_bytes()
@@ -49,6 +46,10 @@ async def bootstrap_repository(repo_url: str, repo_name: str):
     
     if all_new_chunks:
         print("Computing dense vectors and syncing to Qdrant...")
+        
+        for chunk in all_new_chunks:
+            body_text = f"File: {chunk.path}\nSymbol:{chunk.symbol}\nCode:{chunk.body}"
+            chunk.sparse_vector = sparse_indexer.generate_sparse_vector(body_text)
         indexer.index_chunks(all_new_chunks)
         print("Complete!")
 

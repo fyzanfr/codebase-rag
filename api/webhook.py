@@ -1,7 +1,7 @@
 import hmac
 import hashlib
 from fastapi import APIRouter, Request, HTTPException, Header, BackgroundTasks, status
-from config import settings
+from config.settings import settings
 from ingestion.queries import EXTENSION_MAP, LANG_CAPSULES, CHUNK_QUERIES
 from ingestion.parser import ASTChunker
 from ingestion.walker import async_git_and_parse_worker

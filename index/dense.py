@@ -1,17 +1,20 @@
 import logging
 import os
-from qdrant_client import QdrantClient 
+from qdrant_client import QdrantClient, models 
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from fastembed import TextEmbedding
 
-from config import settings
+from config.settings import settings
 from models.chunk import CodeChunk
 
 logging.basicConfig(level=logging.INFO)
 
 class DenseIndex:
     def __init__(self):
-        self.client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+        self.client = QdrantClient(
+                url=settings.QDRANT_HOST, 
+                api_key=settings.QDRANT_API_KEY
+            )
         
         logging.info("loading local FastEmbed model (BAAI/bge-small-en-v1.5)...")
         self.embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
@@ -31,10 +34,15 @@ class DenseIndex:
             logging.info(f"creating new local Qdrant collection: '{settings.COLLECTION_NAME}' ({self.dimension})")
             self.client.create_collection(
                     collection_name=settings.COLLECTION_NAME,
-                    vectors_config=VectorParams(
-                        size=self.dimension,
-                        distance = Distance.COSINE
-                    )
+                    vectors_config={
+                        "dense": models.VectorParams(
+                            size=settings.EMBEDDING_DIMENSION,
+                            distance=models.Distance.COSINE
+                            )
+                        },
+                    sparse_vectors_config={
+                        "sparse": models.SparseVectorParams()
+                        }
                 )
 
     def index_chunks(self, chunks: list[CodeChunk]):
@@ -54,22 +62,29 @@ class DenseIndex:
             chunk.dense_vector = [float(x) for x in vectors[i]]
             unique_anchor_str = f"{chunk.repo}/{chunk.path}:{chunk.symbol}:{chunk.start_line}"
 
-            points.append(PointStruct(
-                id=hash(unique_anchor_str) & 0xFFFFFFFFFFFFFFFF,
-                vector=chunk.dense_vector,
-                payload={
-                    "repo": chunk.repo,
-                    "path": chunk.path,
-                    "start_line": chunk.start_line,
-                    "end_line": chunk.end_line,
-                    "symbol": chunk.symbol,
-                    "kind": chunk.kind,
-                    "body": chunk.body,
-                    "language": chunk.language,
-                    #"summary": chunk.summary
-                }
+            points.append(
+                    PointStruct(
+                        id=hash(unique_anchor_str) & 0xFFFFFFFFFFFFFFFF,
+                        vector={
+                            "dense": chunk.dense_vector,
+                            "sparse": models.SparseVector(
+                                indices=chunk.sparse_vector["indices"],
+                                values=chunk.sparse_vector["values"]
+                                )
+                            },
+                        payload={
+                            "repo": chunk.repo,
+                            "path": chunk.path,
+                            "start_line": chunk.start_line,
+                            "end_line": chunk.end_line,
+                            "symbol": chunk.symbol,
+                            "kind": chunk.kind,
+                            "body": chunk.body,
+                            "language": chunk.language,
+                        #"summary": chunk.summary
+                    }
 
-            ))
+            )   )
 
         logging.info(f"uploading {len(points)} points to local Qdrant...")
         self.client.upsert(

@@ -1,18 +1,32 @@
 import os
 from pathlib import Path 
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = Path(__file__).resolve().parent.parent 
-STORAGE_ROOT = Path("/home/RYVEN/workspace/mirrored_repos").resolve()
-STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+class Settings(BaseSettings):
 
-GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "local_development_server")
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent 
+    STORAGE_ROOT: Path = Path("/home/RYVEN/workspace/mirrored_repos").resolve()
 
-MAX_WORKERS = os.cpu_count() or 4
-MAX_FILE_SIZE_BYTES = 1_000_000 #1MB 
+    GITHUB_WEBHOOK_SECRET: str = "local_development_server"
+
+    MAX_WORKERS: int = os.cpu_count() or 4
+    MAX_FILE_SIZE_BYTES: int = 1_000_000 #1MB 
 
 
 # Qdrant config
-QDRANT_HOST = "localhost"
-QDRANT_PORT = 6333
-COLLECTION_NAME = "codebase_chunks"
-EMBEDDING_DIMENSION = 1536
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_API_KEY: str | None = None 
+    COLLECTION_NAME: str = "codebase_chunks"
+    EMBEDDING_DIMENSION: int = 384
+
+    model_config = SettingsConfigDict(
+            env_file=".env",
+            env_file_encoding="utf-8",
+            extra="ignore"
+        )
+
+
+settings = Settings()
+settings.STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+

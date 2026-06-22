@@ -4,7 +4,7 @@ import tree_sitter_rust as tsrust
 import tree_sitter_go as tsgo 
 import tree_sitter_java as tsjava 
 
-# Query Strings
+# --- Raw Query Strings
 
 _ts_query = """
     (function_declaration name: (identifier) @name body: (statement_block) @body) @node
