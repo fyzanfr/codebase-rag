@@ -2,8 +2,8 @@
 .env
 tmp/
 qdrant_storage/
-
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/

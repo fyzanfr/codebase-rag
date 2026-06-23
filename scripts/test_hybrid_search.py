@@ -18,7 +18,7 @@ async def test_hybrid_search():
         retriever = HybridRetriever()
         
         # Define a sample test query
-        query_text = "how to implement backward pass"
+        query_text = "how to implement MLP layer"
         
         print(f"Executing query: '{query_text}'")
         
@@ -33,7 +33,7 @@ async def test_hybrid_search():
                 print(f"\nResult {i}:")
                 print(f"Score: {hit.get('score')}")
                 print(f"Path: {hit.get('path')}")
-                print(f"Body snippet: {hit.get('body', '')[:100]}...")
+                print(f"Body snippet: {hit.get('body', '')}...")
 
     except Exception as e:
         print(f"Hybrid search test failed: {e}")
