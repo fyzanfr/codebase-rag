@@ -45,6 +45,18 @@ class DenseIndex:
                         }
                 )
 
+        self.client.create_payload_index(
+                collection_name = settings.COLLECTION_NAME,
+                field_name="repo_name",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+        self.client.create_payload_index(
+                collection_name=settings.COLLECTION_NAME,
+                field_name="path",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+
+
     def index_chunks(self, chunks: list[CodeChunk]):
         if not chunks:
             return
@@ -61,6 +73,13 @@ class DenseIndex:
         for i, chunk in enumerate(chunks):
             chunk.dense_vector = [float(x) for x in vectors[i]]
             unique_anchor_str = f"{chunk.repo}/{chunk.path}:{chunk.symbol}:{chunk.start_line}"
+
+            if getattr(chunk, "sparse_vector", None) is not None:
+                sparse_indices = chunk.sparse_vector.get("indices", [])
+                sparse_values = chunk.sparse_vector.get("values", [])
+            else:
+                sparse_indices = []
+                sparse_values = []
 
             points.append(
                     PointStruct(

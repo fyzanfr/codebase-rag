@@ -42,17 +42,36 @@ async def github_push_receiver(request: Request, background_tasks: BackgroundTas
 
     if not repo_name or not clone_url or target_commit == "0000000000000000000000000000000000000000":
         return {"status": "ignored"}
-
-    changed_files = set()
+    
+    files_to_update = set()
+    files_to_delete = set()
+    
     for commit in payload.get("commits", []):
-        changed_files.update(commit.get("added", []))
-        changed_files.update(commit.get("modified", []))
+        files_to_update.update(commit.get("added", []))
+        files_to_update.update(commit.get("modified", []))
+
+        files_to_delete.update(commit.get("removed", []))
+
+    files_to_update.difference_update(files_to_delete)
 
     background_tasks.add_task(
         async_git_and_parse_worker,
-        repo_name, clone_url, target_commit, list(changed_files), chunker
+        repo_name=repo_name, 
+        clone_url=clone_url,
+        target_commit=target_commit, 
+        update_paths=list(files_to_update),
+        delete_paths=list(files_to_delete),
+        chunker=chunker 
     )
 
-    return {"status": "queued", "repository": repo_name, "commit": target_commit[:7]}
+    return {
+            "status": "queued", 
+            "repository": repo_name, 
+            "commit": target_commit[:7],
+            "updating": len(files_to_update),
+            "deleting": len(files_to_delete)
+        }
+
+
 
 

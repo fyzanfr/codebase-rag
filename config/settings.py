@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).resolve().parent.parent 
     STORAGE_ROOT: Path = Path("/home/RYVEN/workspace/mirrored_repos").resolve()
 
-    GITHUB_WEBHOOK_SECRET: str = "local_development_server"
+    GITHUB_WEBHOOK_SECRET: str = "development_server"
 
     MAX_WORKERS: int = os.cpu_count() or 4
     MAX_FILE_SIZE_BYTES: int = 1_000_000 #1MB 

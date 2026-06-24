@@ -13,6 +13,7 @@ class CodeChunk:
     language: str
     summary: str = ""
     dense_vector: list[float] | None = None
+    sparse_vector: dict[str, list] | None = None
     is_generated: bool = False
 
     def anchor(self) -> str:
