@@ -1,29 +1,69 @@
-# Codebase RAG Pipeline (with Incremental Synchronization)
+# Codebase RAG
 
-A high-performance, event-driven Retrieval-Augmented Generation (RAG) pipeline designed to index, parse, and query complex codebases. Unlike naive character-splitting RAG setups, this system utilizes Abstract Syntax Tree (AST) structural chunking and handles dynamic repository changes via live GitHub webhooks to perform real-time vector synchronization.
+AST-based code chunking, hybrid vector search (dense + sparse), and LLM-powered Q&A over your codebase.
 
-## Key Features
+## Features
 
-* **AST-Based Code Chunking:** Breaks down source code by logical blocks (functions, classes, symbols) rather than static character limits to maintain strict semantic context.
-* **Hybrid Vector Indexing:** Employs a dense vector layout using `FastEmbed` (`BAAI/bge-small-en-v1.5`) mapped directly alongside an optimized sparse vector configuration inside Qdrant Cloud.
-* **Event-Driven Sync (Webhook Worker):** Processes real-time incoming GitHub push payloads through an asynchronous FastAPI pipeline.
-* **Surgical Database Updates:** Parses `git diff` boundaries to dynamically isolate modified or deleted files, executing precise metadata vector purges and upserts without rebuilding the entire index.
-* **Decoupled LLM Layer:** Hot-swappable LLM factory architecture integrating high-throughput Groq processing nodes for lightning-fast RAG generation.
+- **AST chunking** — parses code by functions, classes, and symbols (not line windows)
+- **Hybrid search** — combines dense embeddings (`BAAI/bge-small-en-v1.5`) with sparse vectors (`Splade_PP_en_v1`) via Qdrant RRF fusion
+- **LLM agnostic** — swap between Groq, OpenAI, Gemini, or Anthropic via `LLMFactory`
+- **Incremental sync** — GitHub webhook receiver for real-time re-indexing
 
-## System Architecture
+## Quick Start
 
-* **Backend Framework:** FastAPI (Async Task Runner Engine)
-* **Vector Engine:** Qdrant Cloud (Managed Cluster Schema)
-* **Embeddings Layer:** FastEmbed (Dense Vector Transformers)
-* **Tunnel Integration:** Ngrok Secure Payload Relay Agent
+### 1. Setup
 
-## ⚙️ Quick Start
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-### 1. Environment Configuration
-Create a `.env` file in the root folder:
+Create `.env`:
+
 ```env
-QDRANT_HOST="your-qdrant-cloud-cluster-url"
-QDRANT_API_KEY="your-qdrant-secret-key"
-COLLECTION_NAME="codebase_chunks"
-EMBEDDING_DIMENSION=384
-GITHUB_WEBHOOK_SECRET="your-configured-payload-secret"
+QDRANT_HOST=http://localhost:6333
+QDRANT_API_KEY=
+COLLECTION_NAME=codebase_chunks
+```
+
+### 2. Ingest a repository
+
+```bash
+python cli.py index -r my-repo -p /path/to/my-repo
+```
+
+### 3. Ask questions
+
+```bash
+export GROQ_API_KEY="your-key"
+python cli.py query "How does authentication work?"
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `index -r <name> -p <path>` | Scan a local repo, AST chunk, and seed Qdrant |
+| `query <question>` | Retrieve relevant chunks and answer via LLM |
+
+Optional flags for `query`: `--top-k`, `--provider`, `--model`, `--api-key`.
+
+## Architecture
+
+```
+Local repo → ASTChunker → CodeChunks → Embed (dense + sparse) → Qdrant Cloud
+User query → HybridRetriever (RRF fusion) → context → LLM → answer
+```
+
+## LLM Providers
+
+| Provider | Default model | Env var |
+|----------|---------------|---------|
+| groq | llama-3.3-70b-versatile | `GROQ_API_KEY` |
+| openai | gpt-4o-mini | `OPENAI_API_KEY` |
+| gemini | gemini-1.5-flash | `GEMINI_API_KEY` |
+| anthropic | claude-3-5-sonnet-latest | `ANTHROPIC_API_KEY` |
+
+## API
+
+Run `uvicorn api.main:app` for the webhook receiver (GitHub push events → auto re-index).
