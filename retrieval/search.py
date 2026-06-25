@@ -21,7 +21,8 @@ class HybridRetriever:
     def __init__(self):
         self.client = AsyncQdrantClient(
                 url=settings.QDRANT_HOST,
-                api_key=settings.QDRANT_API_KEY
+                api_key=settings.QDRANT_API_KEY,
+                check_compatibility=False
             )
         self.dense_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
         self.sparse_engine = SparseIndex()

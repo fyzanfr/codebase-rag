@@ -1,19 +1,12 @@
 import logging
 from pathlib import Path
 from git import Repo
-from config import settings
+from config.settings import settings
 from index.dense import DenseIndex
 from qdrant_client import QdrantClient, models
-from config.settings import settings
-
-dense_indexer = DenseIndex()
-qdrant_client = QdrantClient(
-        url=settings.QDRANT_HOST,
-        api_key=settings.QDRANT_API_KEY
-        )
 
 
-def delete_vectors_by_path(repo_name: str, file_paths: list[str]):
+def delete_vectors_by_path(repo_name: str, file_paths: list[str], qdrant_client: QdrantClient):
     if not file_paths:
         return
 
@@ -45,6 +38,11 @@ def async_git_and_parse_worker(
         chunker
     ):
 
+    dense_indexer = DenseIndex()
+    qdrant_client = QdrantClient(
+        url=settings.QDRANT_HOST,
+        api_key=settings.QDRANT_API_KEY
+    )
     local_repo_path = settings.STORAGE_ROOT / repo_name
 
     try:
@@ -62,7 +60,7 @@ def async_git_and_parse_worker(
 
         paths_to_wipe = list(set(update_paths + delete_paths))
         if paths_to_wipe:
-            delete_vectors_by_path(repo_name, paths_to_wipe)
+            delete_vectors_by_path(repo_name, paths_to_wipe, qdrant_client)
 
 
         all_new_chunks = []

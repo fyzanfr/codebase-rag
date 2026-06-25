@@ -2,26 +2,15 @@ import concurrent.futures
 import logging
 import os
 from pathlib import Path
-from dataclasses import dataclass 
 
 from tree_sitter import Parser, Language, Query, QueryCursor
 
 # import config maps
 
 from ingestion.queries import EXTENSION_MAP, LANG_CAPSULES, CHUNK_QUERIES
+from models.chunk import CodeChunk
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-@dataclass
-class CodeChunk:
-    repo:str
-    path:str
-    start_line:int
-    end_line:int 
-    symbol:str 
-    kind:str 
-    body:str 
-    language:str 
 
 
 class ASTChunker:

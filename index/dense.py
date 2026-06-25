@@ -74,12 +74,11 @@ class DenseIndex:
             chunk.dense_vector = [float(x) for x in vectors[i]]
             unique_anchor_str = f"{chunk.repo}/{chunk.path}:{chunk.symbol}:{chunk.start_line}"
 
-            if getattr(chunk, "sparse_vector", None) is not None:
-                sparse_indices = chunk.sparse_vector.get("indices", [])
-                sparse_values = chunk.sparse_vector.get("values", [])
-            else:
-                sparse_indices = []
-                sparse_values = []
+            sparse_data = getattr(chunk, "sparse_vector", None) or {}
+
+            sparse_indices = sparse_data.get("indices", []) if isinstance(sparse_data, dict) else []
+            sparse_values = sparse_data.get("values", []) if isinstance(sparse_data, dict) else []
+
 
             points.append(
                     PointStruct(
@@ -87,8 +86,8 @@ class DenseIndex:
                         vector={
                             "dense": chunk.dense_vector,
                             "sparse": models.SparseVector(
-                                indices=chunk.sparse_vector["indices"],
-                                values=chunk.sparse_vector["values"]
+                                indices=sparse_indices,
+                                values=sparse_values
                                 )
                             },
                         payload={
